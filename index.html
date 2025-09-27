@@ -103,10 +103,7 @@ let AUTO_UNLOCK_SECONDS = 8;   // Tiempo de protección tras cambiar de canal
 const STORAGE_LAST = 'antibloqueo:lastChannel';
 const STORAGE_LIST = 'antibloqueo:customList';
 
-/** ========= BASE: CATEGORÍAS Y CANALES =========
- * Puedes mantener esta base y además importar tus propios links (se suman).
- * Incluyo Caracol (legal) con tu enlace. El resto son placeholders para completar.
- */
+/** ========= BASE: CATEGORÍAS Y CANALES ========= **/
 const BASE_GROUPS = [
   { label: "Nacionales (CO)", channels: [
     { name: "free premium tv (legal – sitio)", url: "https://cuervo-123.github.io/free-premium-tv" },
@@ -114,24 +111,26 @@ const BASE_GROUPS = [
     { name: "RCN (agrega URL)", url: "" },
     { name: "Canal 1 (agrega URL)", url: "" },
     { name: "Señal Colombia (agrega URL)", url: "" },
-    { name: " (agrega URL)", url: " },
-    { name: "Citytv (agrega URL)", url: "" },
+    { name: "Citytv (agrega URL)", url: "" }
   ]},
   { label: "Regionales (CO)", channels: [
     { name: "Teleantioquia (agrega URL)", url: "" },
     { name: "Telemedellín (agrega URL)", url: "" },
     { name: "Telecaribe (agrega URL)", url: "" },
     { name: "Telepacífico (agrega URL)", url: "" },
-    { name: "Canal TRO (agrega URL)", url: "" },
+    { name: "Canal TRO (agrega URL)", url: "" }
   ]},
   { label: "Noticias", channels: [
     { name: "NTN24 (agrega URL)", url: "" },
-    { name: "Noticias Caracol Señal (agrega URL)", url: "" },
+    { name: "Noticias Caracol Señal (agrega URL)", url: "" }
   ]},
   { label: "Internacionales", channels: [
     { name: "DW Español (agrega URL)", url: "" },
-    { name: "France 24 ES (agrega URL)", url: "" },
+    { name: "France 24 ES (agrega URL)", url: "" }
   ]},
+  { label: "Películas", channels: [
+    { name: "Movies Home", url: "https://ww20.0123movie.net/home.html" }
+  ]}
 ];
 
 /** ========= ELEMENTOS ========= **/
@@ -165,16 +164,16 @@ function setLocked(on) {
   locked = on;
   shield.style.display = on ? 'grid' : 'none';
   modeEl.textContent = on ? 'Bloqueado' : 'Desbloqueado';
-  if (on) window.focus();
+  if (on) { try { window.focus(); } catch {} }
 }
 
 function startCountdown() {
   seconds = AUTO_UNLOCK_SECONDS;
-  countEl.textContent = seconds;
+  countEl.textContent = String(seconds);
   clearInterval(timer);
   timer = setInterval(() => {
     seconds -= 1;
-    countEl.textContent = seconds;
+    countEl.textContent = String(Math.max(0, seconds));
     if (seconds <= 0) {
       clearInterval(timer);
       setLocked(false);
@@ -182,32 +181,25 @@ function startCountdown() {
   }, 1000);
 }
 
-function getAllChannelsFlat() {
-  const flat = [];
-  for (const g of groups) for (const ch of g.channels) flat.push(ch);
-  for (const ch of customList) flat.push(ch);
-  return flat;
-}
-
 function rebuildSelect(filterText = "") {
   const prev = selectEl.value;
   selectEl.innerHTML = "";
   const f = (s) => s.toLowerCase().includes(filterText.toLowerCase().trim());
-  // grupos base
+
   for (const g of groups) {
     const optgroup = document.createElement('optgroup');
     optgroup.label = g.label;
     for (const ch of g.channels) {
       if (filterText && !(f(ch.name))) continue;
       const opt = document.createElement('option');
-      opt.value = JSON.stringify({ type:"base", name: ch.name, url: ch.url });
+      opt.value = JSON.stringify({ type:"base", name: ch.name, url: ch.url || "" });
       opt.textContent = ch.name + (ch.url ? "" : " (falta URL)");
       if (!ch.url) opt.disabled = true;
       optgroup.appendChild(opt);
     }
     if (optgroup.children.length) selectEl.appendChild(optgroup);
   }
-  // grupo importados
+
   const imported = document.createElement('optgroup');
   imported.label = "Importados por ti";
   for (const ch of customList) {
@@ -219,29 +211,24 @@ function rebuildSelect(filterText = "") {
   }
   if (imported.children.length) selectEl.appendChild(imported);
 
-  // mantiene selección si existe
   for (const o of selectEl.options) {
     if (o.value === prev) { selectEl.value = prev; break; }
   }
 }
 
+function safeParse(val) {
+  try { return JSON.parse(val); } catch { return null; }
+}
+
 function loadSelectedChannel(auto = true) {
   if (!selectEl.value) return;
-  const info = JSON.parse(selectEl.value);
-  const url = info.url;
-  if (!url) return;
-
-  // Escudo + cuenta
+  const info = safeParse(selectEl.value);
+  if (!info || !info.url) return;
   setLocked(true);
   startCountdown();
-
-  // Cargar URL
-  iframe.src = url;
-
-  // Guardar última selección
-  localStorage.setItem(STORAGE_LAST, url);
-
-  if (auto) window.focus();
+  iframe.src = info.url;
+  try { localStorage.setItem(STORAGE_LAST, info.url); } catch {}
+  if (auto) { try { window.focus(); } catch {} }
 }
 
 function changeSelection(delta) {
@@ -258,11 +245,10 @@ function parseBulk(text) {
   const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
   const out = [];
   for (const line of lines) {
-    // Formato: Nombre — URL  (guión largo U+2014 o normal -)
-    const m = line.split(/—|-/); // permisivo
+    const m = line.split(/—|-/);
     if (m.length < 2) continue;
     const name = m[0].trim();
-    const url  = m.slice(1).join('-').trim(); // reensambla si hay más guiones
+    const url  = m.slice(1).join('-').trim();
     if (!name || !/^https?:\/\//i.test(url)) continue;
     out.push({ name, url });
   }
@@ -270,7 +256,7 @@ function parseBulk(text) {
 }
 
 function saveCustomList() {
-  localStorage.setItem(STORAGE_LIST, JSON.stringify(customList));
+  try { localStorage.setItem(STORAGE_LIST, JSON.stringify(customList)); } catch {}
 }
 
 function loadCustomList() {
@@ -299,7 +285,6 @@ btnPreview.addEventListener('click', () => {
 btnAdd.addEventListener('click', () => {
   const parsed = parseBulk(bulkInput.value);
   if (!parsed.length) { alert("No se reconocieron entradas válidas. Usa: Nombre — URL"); return; }
-  // merge evitando duplicados por nombre
   const names = new Set(customList.map(c => c.name.toLowerCase()));
   for (const p of parsed) {
     if (!names.has(p.name.toLowerCase())) customList.push(p);
@@ -319,38 +304,35 @@ btnClear.addEventListener('click', () => {
 btnApply.addEventListener('click', () => {
   const v = Math.max(0, Number(unlockSecondsEl.value || 0) | 0);
   AUTO_UNLOCK_SECONDS = v;
-  // si el escudo está visible, actualiza contador visible:
   if (locked) { clearInterval(timer); startCountdown(); }
 });
 
-// Teclas globales
 ['keydown','keypress','keyup'].forEach(type => {
   document.addEventListener(type, e => {
     if (type === 'keydown') {
       if (e.key === 'ArrowUp')  { e.preventDefault(); changeSelection(-1); return; }
       if (e.key === 'ArrowDown'){ e.preventDefault(); changeSelection(1); return; }
-      if (e.key.toLowerCase?.() === 'b') { e.preventDefault(); setLocked(true); startCountdown(); return; }
+      if ((e.key || '').toLowerCase?.() === 'b') { e.preventDefault(); setLocked(true); startCountdown(); return; }
       if (e.key === 'Enter') { e.preventDefault(); setLocked(false); return; }
     }
     if (locked) { e.preventDefault(); e.stopPropagation(); return false; }
   }, true);
 });
 
-// Observador opcional de cambios de src
-const observer = new MutationObserver(() => { /* puedes monitorear iframe.src aquí si quieres */ });
+const observer = new MutationObserver(() => {});
 observer.observe(iframe, { attributes: true, attributeFilter: ['src'] });
 
 /** ========= INICIO ========= **/
 loadCustomList();
 rebuildSelect("");
-// selecciona último canal por URL si existe
-const lastUrl = localStorage.getItem(STORAGE_LAST);
-if (lastUrl) {
-  // busca opción con esa URL
-  const opts = [...selectEl.options];
-  const found = opts.find(o => { try { return JSON.parse(o.value).url === lastUrl; } catch { return false; } });
-  if (found) found.selected = true;
-}
+try {
+  const lastUrl = localStorage.getItem(STORAGE_LAST);
+  if (lastUrl) {
+    const opts = [...selectEl.options];
+    const found = opts.find(o => { const v = safeParse(o.value); return v && v.url === lastUrl; });
+    if (found) found.selected = true;
+  }
+} catch {}
 if (selectEl.options.length > 0) {
   loadSelectedChannel(true);
 }
